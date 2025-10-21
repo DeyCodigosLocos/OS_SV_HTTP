@@ -1,5 +1,3 @@
-// socket, accept loop, manejo de clientes
-
 package server
 
 import (
@@ -18,13 +16,14 @@ func NewServer(port int) *Server {
 }
 
 func (s *Server) Start() {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	addr := fmt.Sprintf(":%d", s.port)
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		panic(err)
 	}
 	defer listener.Close()
 
-	fmt.Printf("Servidor escuchando en puerto %d\n", s.port)
+	fmt.Printf("Servidor escuchando en %s\n", addr)
 
 	for {
 		conn, err := listener.Accept()
@@ -32,7 +31,9 @@ func (s *Server) Start() {
 			fmt.Println("Error al aceptar conexión:", err)
 			continue
 		}
+		fmt.Printf("Nueva conexión desde %s\n", conn.RemoteAddr())
 
+		// cada conexión se maneja en una goroutine
 		go s.handleConnection(conn)
 	}
 }
@@ -41,23 +42,39 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
+	// --- Leer la primera línea (Request-Line)
 	requestLine, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println("Error al leer solicitud:", err)
 		return
 	}
 
-	method, path, _ := parseRequestLine(requestLine)
-	fmt.Printf("Solicitud recibida: %s %s\n", method, path)
+	method, path, version := parseRequestLine(requestLine)
 
+	// --- Leer y descartar headers (hasta línea vacía)
+	for {
+		line, _ := reader.ReadString('\n')
+		if line == "\r\n" || line == "\n" {
+			break
+		}
+	}
+
+	fmt.Printf("[%s] %s %s\n", version, method, path)
+
+	// --- Procesar la solicitud y generar respuesta completa (HTTP/1.0)
 	response := HandleRequest(method, path)
+
+	// --- Enviar la respuesta al cliente
 	conn.Write([]byte(response))
 }
 
 func parseRequestLine(line string) (method, path, version string) {
 	parts := strings.Fields(line)
-	if len(parts) >= 3 {
+	if len(parts) == 3 {
 		return parts[0], parts[1], parts[2]
 	}
 	return "", "", ""
 }
+
+
+
