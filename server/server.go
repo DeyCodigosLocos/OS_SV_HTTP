@@ -42,16 +42,14 @@ func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
-	// --- Leer la primera línea (Request-Line)
 	requestLine, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println("Error al leer solicitud:", err)
 		return
 	}
-
 	method, path, version := parseRequestLine(requestLine)
 
-	// --- Leer y descartar headers (hasta línea vacía)
+	// Ignorar headers
 	for {
 		line, _ := reader.ReadString('\n')
 		if line == "\r\n" || line == "\n" {
@@ -61,10 +59,10 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	fmt.Printf("[%s] %s %s\n", version, method, path)
 
-	// --- Procesar la solicitud y generar respuesta completa (HTTP/1.0)
-	response := HandleRequest(method, path)
+	body := HandleRequest(method, path)
 
-	// --- Enviar la respuesta al cliente
+	// Construir y enviar respuesta HTTP/1.0 correcta
+	response := buildResponse(200, body)
 	conn.Write([]byte(response))
 }
 
@@ -75,6 +73,8 @@ func parseRequestLine(line string) (method, path, version string) {
 	}
 	return "", "", ""
 }
+
+
 
 
 

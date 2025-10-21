@@ -3,6 +3,7 @@
 package server
 
 import "fmt"
+import "strings"
 
 func buildResponse(code int, body string) string {
 	statusText := map[int]string{
@@ -12,12 +13,15 @@ func buildResponse(code int, body string) string {
 		500: "Internal Server Error",
 	}[code]
 
-	headers := fmt.Sprintf(
-		"HTTP/1.0 %d %s\r\n"+
-			"Content-Type: application/json\r\n"+
-			"Content-Length: %d\r\n"+
-			"Connection: close\r\n\r\n",
-		code, statusText, len(body),
-	)
-	return headers + body
+	// Aseguramos línea de estado y encabezados con \r\n
+	var b strings.Builder
+	fmt.Fprintf(&b, "HTTP/1.0 %d %s\r\n", code, statusText)
+	fmt.Fprintf(&b, "Content-Type: application/json\r\n")
+	fmt.Fprintf(&b, "Content-Length: %d\r\n", len(body))
+	fmt.Fprintf(&b, "Connection: close\r\n")
+	fmt.Fprintf(&b, "\r\n") // línea vacía requerida
+	b.WriteString(body)
+
+	return b.String()
 }
+

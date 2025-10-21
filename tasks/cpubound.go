@@ -6,8 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/big"
 	"math/rand"
+	"math/big"
+	"time"
 )
 
 // ---------------------------
@@ -72,51 +73,60 @@ func Factor(n int64) ([][]int64, error) {
 // Es iterativo y usa big.Int para precisión arbitraria.
 // ---------------------------
 func PiDigits(digits int) string {
-	if digits <= 0 {
-		return ""
-	}
+	start := time.Now()
 
-	const extra = 10 // pequeños dígitos adicionales para redondeo
-	n := (digits * 10 / 3) + extra
+	// Establece la precisión en bits (aprox. 3.32 bits por dígito)
+	prec := uint(digits * 4)
+	
 
-	// Inicializar arrays
-	arr := make([]int, n)
-	for i := range arr {
-		arr[i] = 2
-	}
+	// Constantes del algoritmo de Chudnovsky
+	a := big.NewFloat(13591409).SetPrec(prec)
+	b := big.NewFloat(545140134).SetPrec(prec)
+	
+	sum := new(big.Float).SetPrec(prec).SetFloat64(0)
+	
+	sixKFact := big.NewFloat(1).SetPrec(prec)
+	threeKFact := big.NewFloat(1).SetPrec(prec)
+	kFact := big.NewFloat(1).SetPrec(prec)
 
-	result := make([]byte, 0, digits)
-	var carry int
-
-	for i := 0; i < digits; i++ {
-		sum := 0
-		for j := n - 1; j > 0; j-- {
-			sum = arr[j]*10 + carry
-			div := (2*j - 1)
-			arr[j] = sum % div
-			carry = sum / div * j
+	neg1pow := 1.0
+	for k := 0; k < digits/14+1; k++ { // 14 dígitos por iteración aprox.
+		// (-1)^k * (6k)! * (13591409 + 545140134k)
+		t1 := new(big.Float).SetPrec(prec).Copy(sixKFact)
+		t2 := new(big.Float).SetPrec(prec).Mul(b, new(big.Float).SetPrec(prec).SetFloat64(float64(k)))
+		t2.Add(t2, a)
+		t1.Mul(t1, t2)
+		if neg1pow < 0 {
+			t1.Neg(t1)
 		}
-		arr[0] = carry % 10
-		carry /= 10
-		result = append(result, byte(carry)+'0')
+
+		// (3k)! * (k!)^3 * (640320^(3k/2))
+		t3 := new(big.Float).SetPrec(prec).Mul(threeKFact, new(big.Float).SetPrec(prec).Mul(kFact, kFact))
+		t3.Mul(t3, kFact)
+		t4 := new(big.Float).SetPrec(prec).SetFloat64(math.Pow(640320, float64(3*k)))
+		t4.Mul(t4, big.NewFloat(1)) // Placeholder para mantener precisión
+		t3.Mul(t3, t4)
+
+		term := new(big.Float).SetPrec(prec).Quo(t1, t3)
+		sum.Add(sum, term)
+
+		// Update factorials para siguiente iteración
+		sixKFact.Mul(sixKFact, new(big.Float).SetFloat64(float64((6*k+1)*(6*k+2)*(6*k+3)*(6*k+4)*(6*k+5)*(6*k+6))))
+		threeKFact.Mul(threeKFact, new(big.Float).SetFloat64(float64((3*k+1)*(3*k+2)*(3*k+3))))
+		kFact.Mul(kFact, new(big.Float).SetFloat64(float64(k+1)))
+		neg1pow *= -1
 	}
 
-	// Insertar el punto decimal después del primer dígito
-	output := string(result)
-	if len(output) > 1 {
-		output = output[:1] + "." + output[1:]
-	}
-	return output
+	// Calcular pi
+	cubeRoot := new(big.Float).SetPrec(prec).SetFloat64(math.Pow(640320, 1.5))
+	pi := new(big.Float).SetPrec(prec).Mul(sum, big.NewFloat(12))
+	pi.Quo(cubeRoot, pi)
+
+	elapsed := time.Since(start)
+	return fmt.Sprintf("%.*f", digits, pi) + fmt.Sprintf(" (%.2fs)", elapsed.Seconds())
 }
 
-// helper: factorial using big.Int
-func factorialBig(n int) *big.Int {
-	res := big.NewInt(1)
-	for i := 2; i <= n; i++ {
-		res.Mul(res, big.NewInt(int64(i)))
-	}
-	return res
-}
+
 
 // ---------------------------
 // Mandelbrot: returns matrix[height][width] with iter count until escape (0..maxIter)

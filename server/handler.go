@@ -7,6 +7,7 @@ import (
 	"strings"
 	"P1/tasks"
 	"time"
+
 )
 
 // HTTPResponse representa una respuesta HTTP lista para enviar.
@@ -161,6 +162,148 @@ func HandleRequest(method, path string) string {
 	case "/help":
 		body := tasks.Help()
 		return buildResponse(200, body)
+	// --------------------------
+	// CPU BOUND 
+	// --------------------------
+	case "/isprime":
+		n := parseIntParam(params, "n", -1)
+		if n < 0 {
+			return `{"error": "Parámetro n inválido"}`
+		}
+
+		isPrime, err := tasks.IsPrime(int64(n))
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+
+		return fmt.Sprintf(`{"n": %d, "is_prime": %v}`, n, isPrime)
+	
+	case "/factor":
+		n := parseIntParam(params, "n", -1)
+		if n < 2 {
+			return `{"error": "Parámetro n inválido"}`
+		}
+		factors, err := tasks.Factor(int64(n))
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+		return fmt.Sprintf(`{"n": %d, "factors": %v}`, n, factors)
+	
+	case "/pi":
+		digits := parseIntParam(params, "digits", 1000)
+		result := tasks.PiDigits(digits)
+		return fmt.Sprintf(`{"digits": %d, "pi": "%s"}`, digits, result)
+
+	case "/mandelbrot":
+		width := parseIntParam(params, "width", 100)
+		height := parseIntParam(params, "height", 100)
+		maxIter := parseIntParam(params, "max_iter", 50)
+	
+		result, err := tasks.Mandelbrot(width, height, maxIter)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+	
+		return fmt.Sprintf(`{"width": %d, "height": %d, "max_iter": %d, "result": %v}`,
+			width, height, maxIter, result)
+	
+	case "/matrixmul":
+		size := parseIntParam(params, "size", 100)
+		seed := parseIntParam(params, "seed", 42)
+	
+		hash, err := tasks.MatrixMul(size, int64(seed))
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+	
+		return fmt.Sprintf(`{"size": %d, "seed": %d, "hash": "%s"}`, size, seed, hash)	
+		
+
+	// --------------------------
+	// IO BOUND 
+	// --------------------------
+
+	// ---------------------- IO-BOUND ----------------------
+
+	case "/sortfile":
+		name := parseStringParam(params, "name", "")
+		algo := parseStringParam(params, "algo", "merge")
+
+		if name == "" {
+			return `{"error": "Falta parámetro name"}`
+		}
+
+		sortedFile, elapsedMs, err := tasks.SortFile(name, algo)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+
+		return fmt.Sprintf(`{"file": "%s", "algorithm": "%s", "output": "%s", "duration_ms": %d}`,
+			name, algo, sortedFile, elapsedMs)
+
+
+	case "/wordcount":
+		name := parseStringParam(params, "name", "")
+		if name == "" {
+			return `{"error": "Falta parámetro name"}`
+		}
+
+		lines, words, bytes, err := tasks.WordCount(name)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+
+		return fmt.Sprintf(`{"file": "%s", "lines": %d, "words": %d, "bytes": %d}`,
+			name, lines, words, bytes)
+
+	case "/grep":
+		name := parseStringParam(params, "name", "")
+		pattern := parseStringParam(params, "pattern", "")
+		if name == "" || pattern == "" {
+			return `{"error": "Faltan parámetros name o pattern"}`
+		}
+
+		count, lines, err := tasks.Grep(name, pattern)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+
+		return fmt.Sprintf(`{"file": "%s", "pattern": "%s", "matches": %d, "lines": %v}`,
+			name, pattern, count, lines)
+
+	case "/compress":
+		name := parseStringParam(params, "name", "")
+		codec := parseStringParam(params, "codec", "gzip")
+
+		if name == "" {
+			return `{"error": "Falta parámetro name"}`
+		}
+
+		output, size, err := tasks.Compress(name, codec)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+
+		return fmt.Sprintf(`{"input": "%s", "output": "%s", "size_bytes": %d}`,
+			name, output, size)
+
+	case "/hashfile":
+		name := parseStringParam(params, "name", "")
+		algo := parseStringParam(params, "algo", "sha256")
+
+		if name == "" {
+			return `{"error": "Falta parámetro name"}`
+		}
+
+		hash, err := tasks.HashFile(name, algo)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
+
+		return fmt.Sprintf(`{"file": "%s", "algo": "%s", "hash": "%s"}`,
+			name, algo, hash)
+
+
 
 	default:
 		return buildResponse(404, `{"error": "Ruta no encontrada"}`)
