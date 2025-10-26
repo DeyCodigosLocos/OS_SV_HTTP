@@ -1,6 +1,7 @@
 package server
 
 import (
+	"P1/jobs"
 	"bufio"
 	"fmt"
 	"net"
@@ -9,10 +10,11 @@ import (
 
 type Server struct {
 	port int
+	Manager *jobs.Manager
 }
 
-func NewServer(port int) *Server {
-	return &Server{port: port}
+func NewServer(port int, manager *jobs.Manager) *Server {
+	return &Server{port: port, Manager: manager}
 }
 
 func (s *Server) Start() {
@@ -59,7 +61,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	fmt.Printf("[%s] %s %s\n", version, method, path)
 
-	body := HandleRequest(method, path)
+	body := HandleRequest(method, path, s.Manager)
 
 	// Construir y enviar respuesta HTTP/1.0 correcta
 	response := buildResponse(200, body)

@@ -7,7 +7,8 @@ import (
 	"strings"
 	"P1/tasks"
 	"time"
-
+	"P1/jobs"
+	"encoding/json"
 )
 
 // HTTPResponse representa una respuesta HTTP lista para enviar.
@@ -17,7 +18,7 @@ type HTTPResponse struct {
 	Body       string
 	ContentType string
 }
-func HandleRequest(method, path string) string {
+func HandleRequest(method, path string, manager *jobs.Manager) string {
 	if method != "GET" {
 		return buildResponse(400, `{"error": "Método no soportado, use GET"}`)
 	}
@@ -223,8 +224,6 @@ func HandleRequest(method, path string) string {
 	// IO BOUND 
 	// --------------------------
 
-	// ---------------------- IO-BOUND ----------------------
-
 	case "/sortfile":
 		name := parseStringParam(params, "name", "")
 		algo := parseStringParam(params, "algo", "merge")
@@ -303,6 +302,42 @@ func HandleRequest(method, path string) string {
 		return fmt.Sprintf(`{"file": "%s", "algo": "%s", "hash": "%s"}`,
 			name, algo, hash)
 
+	// --------------------------
+	// JOB MANAGER 
+	// --------------------------
+	case "/jobs/submit":
+		jobID, status, err := manager.Submit(params.Get("task"), params)
+		if err != nil {
+			return buildResponse(400, fmt.Sprintf(`{"error": "%v"}`, err))
+		}
+		body := fmt.Sprintf(`{"job_id": "%s", "status": "%s"}`, jobID, status)
+		return buildResponse(200, body)
+
+	case "/jobs/status":
+		id := parseStringParam(params, "id", "")
+		job, err := manager.GetStatus(id)
+		if err != nil {
+			return buildResponse(404, `{"error":"Job no encontrado"}`)
+		}
+		body, _ := json.Marshal(job)
+		return buildResponse(200, string(body))
+
+	case "/jobs/result":
+		id := parseStringParam(params, "id", "")
+		result, err := manager.GetResult(id)
+		if err != nil {
+			return buildResponse(404, `{"error":"Job no encontrado"}`)
+		}
+		return buildResponse(200, result)
+
+	case "/jobs/cancel":
+		id := parseStringParam(params, "id", "")
+		status, err := manager.Cancel(id)
+		if err != nil {
+			return buildResponse(404, `{"error":"Job no encontrado"}`)
+		}
+		body := fmt.Sprintf(`{"id":"%s","status":"%s"}`, id, status)
+		return buildResponse(200, body)
 
 
 	default:
