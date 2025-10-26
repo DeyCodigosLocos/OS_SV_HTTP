@@ -40,6 +40,9 @@ func (s *Server) Start() {
 	}
 }
 
+// Maneja una conexión individual.
+// Lee la solicitud, procesa y envía la respuesta.
+// cuando termina, cierra la conexión.
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
