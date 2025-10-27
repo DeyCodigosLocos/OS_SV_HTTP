@@ -192,7 +192,10 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 	
 	case "/pi":
 		digits := parseIntParam(params, "digits", 1000)
-		result := tasks.PiDigits(digits)
+		result, err := tasks.PiDigits(digits)
+		if err != nil {
+			return fmt.Sprintf(`{"error": "%v"}`, err)
+		}
 		return fmt.Sprintf(`{"digits": %d, "pi": "%s"}`, digits, result)
 
 	case "/mandelbrot":
@@ -288,19 +291,19 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 
 	case "/hashfile":
 		name := parseStringParam(params, "name", "")
-		algo := parseStringParam(params, "algo", "sha256")
+		
 
 		if name == "" {
 			return `{"error": "Falta parámetro name"}`
 		}
 
-		hash, err := tasks.HashFile(name, algo)
+		hash, err := tasks.HashFile(name)
 		if err != nil {
 			return fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"file": "%s", "algo": "%s", "hash": "%s"}`,
-			name, algo, hash)
+		return fmt.Sprintf(`{"file": "%s" "hash": "%s"}`,
+			name, hash)
 
 	// --------------------------
 	// JOB MANAGER 

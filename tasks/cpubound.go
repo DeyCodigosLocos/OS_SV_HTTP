@@ -72,26 +72,26 @@ func Factor(n int64) ([][]int64, error) {
 // PiDigits calcula los primeros n dígitos de π usando el algoritmo Spigot.
 // Es iterativo y usa big.Int para precisión arbitraria.
 // ---------------------------
-func PiDigits(digits int) string {
-	start := time.Now()
+func PiDigits(digits int) (string, error) {
+	if digits <= 0 {
+		return "", fmt.Errorf("el número de dígitos debe ser mayor que cero")
+	}
 
+	start := time.Now()
 	// Establece la precisión en bits (aprox. 3.32 bits por dígito)
 	prec := uint(digits * 4)
-	
 
 	// Constantes del algoritmo de Chudnovsky
 	a := big.NewFloat(13591409).SetPrec(prec)
 	b := big.NewFloat(545140134).SetPrec(prec)
-	
+
 	sum := new(big.Float).SetPrec(prec).SetFloat64(0)
-	
 	sixKFact := big.NewFloat(1).SetPrec(prec)
 	threeKFact := big.NewFloat(1).SetPrec(prec)
 	kFact := big.NewFloat(1).SetPrec(prec)
 
 	neg1pow := 1.0
 	for k := 0; k < digits/14+1; k++ { // 14 dígitos por iteración aprox.
-		// (-1)^k * (6k)! * (13591409 + 545140134k)
 		t1 := new(big.Float).SetPrec(prec).Copy(sixKFact)
 		t2 := new(big.Float).SetPrec(prec).Mul(b, new(big.Float).SetPrec(prec).SetFloat64(float64(k)))
 		t2.Add(t2, a)
@@ -100,17 +100,16 @@ func PiDigits(digits int) string {
 			t1.Neg(t1)
 		}
 
-		// (3k)! * (k!)^3 * (640320^(3k/2))
 		t3 := new(big.Float).SetPrec(prec).Mul(threeKFact, new(big.Float).SetPrec(prec).Mul(kFact, kFact))
 		t3.Mul(t3, kFact)
 		t4 := new(big.Float).SetPrec(prec).SetFloat64(math.Pow(640320, float64(3*k)))
-		t4.Mul(t4, big.NewFloat(1)) // Placeholder para mantener precisión
+		t4.Mul(t4, big.NewFloat(1)) // Placeholder
 		t3.Mul(t3, t4)
 
 		term := new(big.Float).SetPrec(prec).Quo(t1, t3)
 		sum.Add(sum, term)
 
-		// Update factorials para siguiente iteración
+		// Actualizar factoriales
 		sixKFact.Mul(sixKFact, new(big.Float).SetFloat64(float64((6*k+1)*(6*k+2)*(6*k+3)*(6*k+4)*(6*k+5)*(6*k+6))))
 		threeKFact.Mul(threeKFact, new(big.Float).SetFloat64(float64((3*k+1)*(3*k+2)*(3*k+3))))
 		kFact.Mul(kFact, new(big.Float).SetFloat64(float64(k+1)))
@@ -123,7 +122,7 @@ func PiDigits(digits int) string {
 	pi.Quo(cubeRoot, pi)
 
 	elapsed := time.Since(start)
-	return fmt.Sprintf("%.*f", digits, pi) + fmt.Sprintf(" (%.2fs)", elapsed.Seconds())
+	return fmt.Sprintf("%.*f (%.2fs)", digits, pi, elapsed.Seconds()), nil
 }
 
 

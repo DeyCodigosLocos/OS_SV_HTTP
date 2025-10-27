@@ -349,10 +349,8 @@ func Compress(name, codec string) (outName string, outSize int64, err error) {
 // ---------------------------
 // HashFile: sha256 streaming
 // ---------------------------
-func HashFile(name, algo string) (string, error) {
-	if strings.ToLower(algo) != "sha256" {
-		return "", errors.New("solo sha256 soportado por ahora")
-	}
+func HashFile(name string) (string, error) {
+	
 	f, err := os.Open(name)
 	if err != nil {
 		return "", err
