@@ -309,40 +309,74 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 	// JOB MANAGER 
 	// --------------------------
 	case "/jobs/submit":
-		jobID, status, err := manager.Submit(params.Get("task"), params)
-		if err != nil {
-			return buildResponse(400, fmt.Sprintf(`{"error": "%v"}`, err))
+		task := params.Get("task")
+		if task == "" {
+			return buildResponse(400, `{"error": "falta parámetro 'task'"}`)
 		}
+
+		// Prioridad (default = normal)
+		prioStr := params.Get("prio")
+		var prio jobs.JobPriority
+		switch prioStr {
+		case "high":
+			prio = jobs.PrioHigh
+		case "low":
+			prio = jobs.PrioLow
+		default:
+			prio = jobs.PrioNormal
+		}
+
+		jobID, status, err := manager.Submit(task, params, prio)
+		if err != nil {
+			body := fmt.Sprintf(`{"error": "%v"}`, err)
+			return buildResponse(400, body)
+		}
+
 		body := fmt.Sprintf(`{"job_id": "%s", "status": "%s"}`, jobID, status)
 		return buildResponse(200, body)
 
 	case "/jobs/status":
 		id := parseStringParam(params, "id", "")
+		if id == "" {
+			return buildResponse(400, `{"error": "falta parámetro 'id'"}`)
+		}
+
 		job, err := manager.GetStatus(id)
 		if err != nil {
-			return buildResponse(404, `{"error":"Job no encontrado"}`)
+			return buildResponse(404, `{"error": "Job no encontrado"}`)
 		}
+
 		body, _ := json.Marshal(job)
 		return buildResponse(200, string(body))
 
 	case "/jobs/result":
 		id := parseStringParam(params, "id", "")
-		result, err := manager.GetResult(id)
-		if err != nil {
-			return buildResponse(404, `{"error":"Job no encontrado"}`)
+		if id == "" {
+			return buildResponse(400, `{"error": "falta parámetro 'id'"}`)
 		}
-		return buildResponse(200, result)
+
+		job, err := manager.GetResult(id)
+		if err != nil {
+			return buildResponse(404, `{"error": "Job no encontrado"}`)
+		}
+
+		body, _ := json.Marshal(job)
+		return buildResponse(200, string(body))
 
 	case "/jobs/cancel":
 		id := parseStringParam(params, "id", "")
+		if id == "" {
+			return buildResponse(400, `{"error": "falta parámetro 'id'"}`)
+		}
+
 		status, err := manager.Cancel(id)
 		if err != nil {
-			return buildResponse(404, `{"error":"Job no encontrado"}`)
+			body := fmt.Sprintf(`{"error": "%v"}`, err)
+			return buildResponse(404, body)
 		}
-		body := fmt.Sprintf(`{"id":"%s","status":"%s"}`, id, status)
+
+		body := fmt.Sprintf(`{"id": "%s", "status": "%s"}`, id, status)
 		return buildResponse(200, body)
-
-
 	default:
 		return buildResponse(404, `{"error": "Ruta no encontrada"}`)
 	}

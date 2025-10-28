@@ -1,29 +1,36 @@
-
 package jobs
 
 import "time"
 
 type JobStatus string
+type JobPriority int
 
-// Posibles estados de un trabajo
 const (
-	StatusQueued    = "queued"
-	StatusRunning   = "running"
-	StatusDone      = "done"
-	StatusError     = "error"
-	StatusCanceled  = "canceled"
+	StatusQueued   JobStatus = "queued"
+	StatusRunning  JobStatus = "running"
+	StatusDone     JobStatus = "done"
+	StatusError    JobStatus = "error"
+	StatusCanceled JobStatus = "canceled"
+
+	PrioLow    JobPriority = 0
+	PrioNormal JobPriority = 1
+	PrioHigh   JobPriority = 2
 )
 
-// Job representa un trabajo en la cola
+// La firma de tus tareas se mantiene.
+type TaskFunc func(params map[string]string, j *Job) (any, error)
+
 type Job struct {
-	ID        string            `json:"job_id"`
+	ID        string            `json:"id"`
 	Task      string            `json:"task"`
 	Params    map[string]string `json:"params"`
 	Status    JobStatus         `json:"status"`
-	Progress  int               `json:"progress"`
+	Priority  JobPriority       `json:"priority"`
+	Progress  int               `json:"progress"` // 0..100
+	ETAMs     int64             `json:"eta_ms"`
 	Result    any               `json:"result"`
-	Error     string            `json:"error,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
-	StartedAt time.Time         `json:"started_at,omitempty"`
-	FinishedAt time.Time        `json:"finished_at,omitempty"`
+	Error     string            `json:"error"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }

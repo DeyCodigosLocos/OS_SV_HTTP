@@ -2,62 +2,103 @@ package jobs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/rand"
 	"net/url"
+	"os"
 	"sync"
 	"time"
-	"os"
 )
 
-// Manager gestiona los jobs y sus colas
-type Manager struct {
-	jobs   map[string]*Job           // jobs activos
-	queues map[string]chan *Job      // colas por tipo de tarea
-	tasks  map[string]TaskFunc       // funciones registradas
-	mu     sync.RWMutex              // mutex de protección
-	file   string                    // archivo JSON para persistencia
+var (
+	ErrTaskNotFound  = errors.New("task no registrada")
+	ErrBackpressure  = errors.New("cola llena: backpressure")
+	ErrJobNotFound   = errors.New("job no encontrado")
+	ErrNotCancelable = errors.New("job no cancelable")
+)
+
+// Configuración por tarea (pool + cola + timeout)
+type taskConf struct {
+	fn         TaskFunc
+	workers    int
+	queueDepth int
+	timeout    time.Duration
+	queue      chan *Job
 }
 
-// TaskFunc define la firma de las funciones de job
-type TaskFunc func(params map[string]string, job *Job) (any, error)
+// Manager con mapas, locks, persistencia y limpieza (TTL)
+type Manager struct {
+	mu sync.RWMutex
 
-// NewManager crea un nuevo Job Manager y carga jobs desde un archivo JSON si existe
-func NewManager(file string) *Manager {
+	tasks map[string]*taskConf
+	jobs  map[string]*Job
+
+	file            string
+	ttl             time.Duration
+	cleanupInterval time.Duration
+	stopCleanup     chan struct{}
+}
+
+// NewManager con persistencia + TTL + limpieza periódica
+func NewManager(file string, ttl time.Duration, cleanupInterval time.Duration) *Manager {
 	m := &Manager{
-		jobs:   make(map[string]*Job),
-		queues: make(map[string]chan *Job),
-		tasks:  make(map[string]TaskFunc),
-		file:   file,
+		tasks:           make(map[string]*taskConf),
+		jobs:            make(map[string]*Job),
+		file:            file,
+		ttl:             ttl,
+		cleanupInterval: cleanupInterval,
+		stopCleanup:     make(chan struct{}),
 	}
 
-	// intentar cargar jobs persistidos
+	// Cargar jobs persistidos (si existe)
 	if _, err := os.Stat(file); err == nil {
-		data, err := os.ReadFile(file)
-		if err == nil {
+		if data, err := os.ReadFile(file); err == nil && len(data) > 0 {
 			_ = json.Unmarshal(data, &m.jobs)
 		}
 	}
 
+	// Arranca limpieza periódica
+	go m.cleanupLoop()
 	return m
 }
 
-// Registrar función de tarea
-func (m *Manager) RegisterTask(name string, fn TaskFunc, queueSize int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.tasks[name] = fn
-	m.queues[name] = make(chan *Job, queueSize)
-}
-
-// Encolar trabajo
-func (m *Manager) Submit(task string, params url.Values) (string, JobStatus, error) {
-	m.mu.RLock()
-	fn, ok := m.tasks[task]
-	m.mu.RUnlock()
-	if !ok {
-		return "", "", fmt.Errorf("task %s no registrada", task)
+// Registrar una tarea con su pool y cola
+func (m *Manager) Register(name string, fn TaskFunc, workers, queueDepth int, timeout time.Duration) {
+	if workers <= 0 {
+		workers = 1
+	}
+	if queueDepth <= 0 {
+		queueDepth = 1
+	}
+	tc := &taskConf{
+		fn:         fn,
+		workers:    workers,
+		queueDepth: queueDepth,
+		timeout:    timeout,
+		queue:      make(chan *Job, queueDepth),
 	}
 
+	m.mu.Lock()
+	m.tasks[name] = tc
+	m.mu.Unlock()
+
+	// Lanzar workers
+	for i := 0; i < workers; i++ {
+		go m.worker(name, tc)
+	}
+}
+
+// Encolar un trabajo (con prioridad simple; por ahora la cola es FIFO)
+func (m *Manager) Submit(task string, params url.Values, prio JobPriority) (string, JobStatus, error) {
+	m.mu.RLock()
+	tc, ok := m.tasks[task]
+	m.mu.RUnlock()
+	if !ok {
+		return "", "", ErrTaskNotFound
+	}
+
+	// aplanar params
 	pp := map[string]string{}
 	for k, v := range params {
 		if len(v) > 0 {
@@ -65,102 +106,188 @@ func (m *Manager) Submit(task string, params url.Values) (string, JobStatus, err
 		}
 	}
 
-	job := &Job{
+	j := &Job{
 		ID:        genID(),
 		Task:      task,
 		Params:    pp,
 		Status:    StatusQueued,
+		Priority:  prio,
 		Progress:  0,
 		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	m.mu.Lock()
-	m.jobs[job.ID] = job
-	ch := m.queues[task]
+	// backpressure (no bloquear)
 	select {
-	case ch <- job:
+	case tc.queue <- j:
 	default:
-		ch <- job // bloqueante si cola llena
+		return "", "", ErrBackpressure
 	}
-	m.mu.Unlock()
-
-	// Ejecutar en goroutine
-	go m.runJob(job, fn)
-
-	return job.ID, job.Status, nil
-}
-
-// Ejecutar trabajo
-func (m *Manager) runJob(job *Job, fn TaskFunc) {
-	m.mu.Lock()
-	job.Status = StatusRunning
-	job.StartedAt = time.Now()
-	m.mu.Unlock()
-
-	res, err := fn(job.Params, job)
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err != nil {
-		job.Status = StatusError
-		job.Result = map[string]string{"error": err.Error()}
-	} else {
-		job.Status = StatusDone
-		job.Result = res
-	}
-	job.FinishedAt = time.Now()
+	m.jobs[j.ID] = j
+	m.mu.Unlock()
+	m.persist()
+
+	return j.ID, j.Status, nil
 }
 
-// Obtener estado
-func (m *Manager) GetStatus(id string) (Job, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	job, ok := m.jobs[id]
-	if !ok {
-		return Job{}, fmt.Errorf("job no encontrado")
-	}
-	return *job, nil
-}
+// Worker: ejecuta con timeout "blando": marcamos timeout si excede, aunque la goroutine siga.
+// (Sin refactor de firma; no pasamos context a la tarea)
+func (m *Manager) worker(taskName string, tc *taskConf) {
+	for j := range tc.queue {
+		m.setStatus(j.ID, StatusRunning)
 
-// Obtener resultado (ya serializado a JSON)
-func (m *Manager) GetResult(id string) (string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	job, ok := m.jobs[id]
-	if !ok {
-		return "", fmt.Errorf("job no encontrado")
-	}
+		resultCh := make(chan any, 1)
+		errCh := make(chan error, 1)
 
-	switch job.Status {
-	case StatusDone:
-		data, err := json.Marshal(job.Result)
-		if err != nil {
-			return "", fmt.Errorf("error serializando resultado: %v", err)
+		// Ejecutar tarea en goroutine
+		go func(job *Job) {
+			res, err := tc.fn(job.Params, job)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			resultCh <- res
+		}(j)
+
+		timeout := tc.timeout
+		if timeout <= 0 {
+			timeout = 60 * time.Second
 		}
-		return string(data), nil
-	case StatusError:
-		return fmt.Sprintf(`{"error":"%s"}`, job.Error), nil
-	default:
-		return fmt.Sprintf(`{"status":"%s"}`, job.Status), nil
+
+		select {
+		case res := <-resultCh:
+			m.finishWithResult(j.ID, res)
+			m.persist()
+		case err := <-errCh:
+			m.finishWithError(j.ID, err)
+			m.persist()
+		case <-time.After(timeout):
+			m.finishWithError(j.ID, fmt.Errorf("timeout (%s)", timeout))
+			m.persist()
+			// Nota: la goroutine interna podría seguir corriendo; en el diseño actual
+			// no podemos cancelarla sin cambiar la firma de TaskFunc. Aceptable para P1.
+		}
 	}
 }
 
-// Cancelar trabajo
-func (m *Manager) Cancel(id string) (string, error) {
+func (m *Manager) setStatus(jobID string, st JobStatus) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	job, ok := m.jobs[id]
-	if !ok {
-		return "", fmt.Errorf("job no encontrado")
+	if j, ok := m.jobs[jobID]; ok {
+		j.Status = st
+		j.UpdatedAt = time.Now()
 	}
-	if job.Status != StatusQueued && job.Status != StatusRunning {
-		return "not_cancelable", nil
-	}
-	job.Status = StatusCanceled
-	return "canceled", nil
 }
 
-// generar IDs simples
+func (m *Manager) finishWithResult(jobID string, res any) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if j, ok := m.jobs[jobID]; ok {
+		j.Status = StatusDone
+		j.Result = res
+		j.Progress = 100
+		j.UpdatedAt = time.Now()
+	}
+}
+
+func (m *Manager) finishWithError(jobID string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if j, ok := m.jobs[jobID]; ok {
+		j.Status = StatusError
+		j.Error = err.Error()
+		j.Progress = 100
+		j.UpdatedAt = time.Now()
+	}
+}
+
+func (m *Manager) GetStatus(jobID string) (*Job, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	j, ok := m.jobs[jobID]
+	if !ok {
+		return nil, ErrJobNotFound
+	}
+	cp := *j
+	return &cp, nil
+}
+
+func (m *Manager) GetResult(jobID string) (*Job, error) {
+	return m.GetStatus(jobID)
+}
+
+// Cancel "lógico" (marcar cancelado si estaba corriendo). Sin context, no podemos matar la goroutine.
+func (m *Manager) Cancel(jobID string) (JobStatus, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	j, ok := m.jobs[jobID]
+	if !ok {
+		return "", ErrJobNotFound
+	}
+	if j.Status != StatusRunning && j.Status != StatusQueued {
+		return "", ErrNotCancelable
+	}
+	j.Status = StatusCanceled
+	j.Progress = 100
+	j.UpdatedAt = time.Now()
+	m.persist()
+	return j.Status, nil
+}
+
+// Persistir a disco
+func (m *Manager) persist() {
+	if m.file == "" {
+		return
+	}
+	data, err := json.MarshalIndent(m.jobs, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(m.file, data, 0644)
+}
+
+// Limpieza periódica por TTL
+func (m *Manager) cleanupLoop() {
+	t := time.NewTicker(m.cleanupInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-m.stopCleanup:
+			return
+		case <-t.C:
+			m.cleanupOnce()
+		}
+	}
+}
+
+func (m *Manager) cleanupOnce() {
+	if m.ttl <= 0 {
+		return
+	}
+	cut := time.Now().Add(-m.ttl)
+
+	m.mu.Lock()
+	changed := false
+	for id, j := range m.jobs {
+		if (j.Status == StatusDone || j.Status == StatusError || j.Status == StatusCanceled) && j.UpdatedAt.Before(cut) {
+			delete(m.jobs, id)
+			changed = true
+		}
+	}
+	m.mu.Unlock()
+	if changed {
+		m.persist()
+	}
+}
+
+// (opcional) para cerrar limpieza si haces shutdown controlado
+func (m *Manager) Close() {
+	close(m.stopCleanup)
+}
+
+// ID simple
 func genID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+	return fmt.Sprintf("%d%04d", time.Now().UnixNano(), rand.Intn(10000))
 }
