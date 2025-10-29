@@ -27,7 +27,10 @@ def parse_json_from_http_response(resp_text):
         print("⚠️  Error parseando JSON:", e)
         return None
 
+
+# ------------------------------------------------------------
 print("--- SUBMIT JOBS ---")
+# ------------------------------------------------------------
 for job in jobs_to_submit:
     try:
         r = requests.get(f"{BASE_URL}/jobs/submit", params=job, timeout=10)
@@ -40,6 +43,7 @@ for job in jobs_to_submit:
             print(f"❌ Error al enviar job {job['task']}: respuesta inválida → {r.text[:80]}")
     except Exception as e:
         print(f"💥 Error al enviar job {job['task']}: {e}")
+
 
 # ------------------------------------------------------------
 print("\n--- POLLING STATUS ---")
@@ -62,6 +66,7 @@ for job_id in submitted_jobs:
     except Exception as e:
         print(f"💥 Error al consultar status para job {job_id}: {e}")
 
+
 # ------------------------------------------------------------
 print("\n--- GET RESULTS ---")
 # ------------------------------------------------------------
@@ -72,5 +77,20 @@ for job_id in submitted_jobs:
         print(f"📦 Resultado {job_id} ({submitted_jobs[job_id]['task']}): {json.dumps(data, indent=2)}")
     except Exception as e:
         print(f"💥 Error al obtener resultado para job {job_id}: {e}")
+
+
+# ------------------------------------------------------------
+print("\n--- 📊 MÉTRICAS DEL SERVIDOR ---")
+# ------------------------------------------------------------
+try:
+    r = requests.get(f"{BASE_URL}/metrics", timeout=10)
+    metrics = parse_json_from_http_response(r.text)
+    if metrics:
+        print(json.dumps(metrics, indent=2))
+    else:
+        print("⚠️ No se pudieron obtener métricas del servidor.")
+except Exception as e:
+    print(f"💥 Error al obtener métricas: {e}")
+
 
 print("\n--- 🧠 TEST COMPLETO ---")

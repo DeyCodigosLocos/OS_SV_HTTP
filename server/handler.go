@@ -377,6 +377,27 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 
 		body := fmt.Sprintf(`{"id": "%s", "status": "%s"}`, id, status)
 		return buildResponse(200, body)
+
+	// --------------------------
+	// METRICS 
+	// --------------------------
+
+	case "/metrics":
+		stats := manager.WorkerStats()
+		queues := manager.QueueSizes()
+		body, _ := json.Marshal(map[string]any{
+			"workers": stats,
+			"queues":  queues,
+			"total_jobs": len(manager.JobsSnapshot()),
+		})
+		return buildResponse(200, string(body))
+	// --------------------------
+	// JOB CLEANUP
+	// --------------------------
+	case "/jobs/cleanup":
+		manager.CleanupOnce()
+		return buildResponse(200, `{"status":"ok"}`)
+	
 	default:
 		return buildResponse(404, `{"error": "Ruta no encontrada"}`)
 	}
