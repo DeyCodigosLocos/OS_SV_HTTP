@@ -295,6 +295,10 @@ func (m *Manager) persist() {
 	if m.file == "" {
 		return
 	}
+
+	m.mu.RLock() 
+    defer m.mu.RUnlock()
+
 	data, err := json.MarshalIndent(m.jobs, "", "  ")
 	if err == nil {
 		_ = os.WriteFile(m.file, data, 0644)

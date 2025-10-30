@@ -18,9 +18,9 @@ type HTTPResponse struct {
 	Body       string
 	ContentType string
 }
-func HandleRequest(method, path string, manager *jobs.Manager) string {
+func HandleRequest(method, path string, manager *jobs.Manager) (int, string) {
 	if method != "GET" {
-		return buildResponse(400, `{"error": "Método no soportado, use GET"}`)
+		return 400, `{"error": "Método no soportado, use GET"}`
 	}
 
 	// Separar ruta y parámetros
@@ -40,29 +40,29 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 	case "/fibonacci":
 		n := parseIntParam(params, "num", -1)
 		if n < 0 {
-			return buildResponse(400, `{"error": "Parámetro num inválido"}`)
+			return 400, `{"error": "Parámetro num inválido"}`
 		}
 		result := tasks.Fibonacci(n)
 		body := fmt.Sprintf(`{"n": %d, "result": %d}`, n, result)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/reverse":
 		text := parseStringParam(params, "text", "")
 		if text == "" {
-			return buildResponse(400, `{"error": "Falta parámetro text"}`)
+			return 400, `{"error": "Falta parámetro text"}`
 		}
 		reversed := tasks.Reverse(text)
 		body := fmt.Sprintf(`{"input": "%s", "result": "%s"}`, text, reversed)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/toupper":
 		text := parseStringParam(params, "text", "")
 		if text == "" {
-			return buildResponse(400, `{"error": "Falta parámetro text"}`)
+			return 400, `{"error": "Falta parámetro text"}`
 		}
 		result := tasks.ToUpper(text)
 		body := fmt.Sprintf(`{"input": "%s", "result": "%s"}`, text, result)
-		return buildResponse(200, body)
+		return 200, body
 
 	// --------------------------
 	// Archivos
@@ -74,32 +74,32 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		repeat := parseIntParam(params, "repeat", 1)
 
 		if name == "" || content == "" {
-			return buildResponse(400, `{"error": "Faltan parámetros name o content"}`)
+			return 400, `{"error": "Faltan parámetros name o content"}`
 		}
 
 		err := tasks.CreateFile(name, content, repeat)
 		if err != nil {
 			body := fmt.Sprintf(`{"error": "%s"}`, err.Error())
-			return buildResponse(500, body)
+			return 500, body
 		}
 
 		body := fmt.Sprintf(`{"message": "Archivo %s creado correctamente"}`, name)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/deletefile":
 		name := parseStringParam(params, "name", "")
 		if name == "" {
-			return buildResponse(400, `{"error": "Falta parámetro name"}`)
+			return 400, `{"error": "Falta parámetro name"}`
 		}
 
 		err := tasks.DeleteFile(name)
 		if err != nil {
 			body := fmt.Sprintf(`{"error": "%s"}`, err.Error())
-			return buildResponse(500, body)
+			return 500, body
 		}
 
 		body := fmt.Sprintf(`{"message": "Archivo %s eliminado correctamente"}`, name)
-		return buildResponse(200, body)
+		return 200, body
 
 	// --------------------------
 	// Estado y utilidades
@@ -107,20 +107,20 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 
 	case "/status":
 		body := tasks.Status(time.Now(), 0)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/timestamp":
 		body := fmt.Sprintf(`{"timestamp": "%s"}`, tasks.Timestamp())
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/hash":
 		text := parseStringParam(params, "text", "")
 		if text == "" {
-			return buildResponse(400, `{"error": "Falta parámetro text"}`)
+			return 400, `{"error": "Falta parámetro text"}`
 		}
 		hash := tasks.Hash(text)
 		body := fmt.Sprintf(`{"input": "%s", "hash": "%s"}`, text, hash)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/random":
 		count := parseIntParam(params, "count", 1)
@@ -129,7 +129,7 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		nums := tasks.RandomNumbers(count, min, max)
 		body := fmt.Sprintf(`{"count": %d, "min": %d, "max": %d, "numbers": %v}`,
 			count, min, max, nums)
-		return buildResponse(200, body)
+		return 200, body
 
 	// --------------------------
 	// Simulación / Carga
@@ -141,20 +141,20 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		result := tasks.Simulate(seconds, task)
 		body := fmt.Sprintf(`{"task": "%s", "duration": %d, "status": "%s"}`,
 			task, seconds, result)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/sleep":
 		seconds := parseIntParam(params, "seconds", 1)
 		tasks.Sleep(seconds)
 		body := fmt.Sprintf(`{"message": "Sleep de %d segundos completado"}`, seconds)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/loadtest":
 		n := parseIntParam(params, "tasks", 5)
 		sleep := parseIntParam(params, "sleep", 1)
 		result := tasks.LoadTest(n, sleep)
 		body := fmt.Sprintf(`{"message": "%s"}`, result)
-		return buildResponse(200, body)
+		return 200, body
 
 	// --------------------------
 	// Ayuda
@@ -162,41 +162,41 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 
 	case "/help":
 		body := tasks.Help()
-		return buildResponse(200, body)
+		return 200, body
 	// --------------------------
 	// CPU BOUND 
 	// --------------------------
 	case "/isprime":
 		n := parseIntParam(params, "n", -1)
 		if n < 0 {
-			return `{"error": "Parámetro n inválido"}`
+			return 400, `{"error": "Parámetro n inválido"}`
 		}
 
 		isPrime, err := tasks.IsPrime(int64(n))
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"n": %d, "is_prime": %v}`, n, isPrime)
+		return 200, fmt.Sprintf(`{"n": %d, "is_prime": %v}`, n, isPrime)
 	
 	case "/factor":
 		n := parseIntParam(params, "n", -1)
 		if n < 2 {
-			return `{"error": "Parámetro n inválido"}`
+			return 400, `{"error": "Parámetro n inválido"}`
 		}
 		factors, err := tasks.Factor(int64(n))
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
-		return fmt.Sprintf(`{"n": %d, "factors": %v}`, n, factors)
+		return 200, fmt.Sprintf(`{"n": %d, "factors": %v}`, n, factors)
 	
 	case "/pi":
 		digits := parseIntParam(params, "digits", 1000)
 		result, err := tasks.PiDigits(digits)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
-		return fmt.Sprintf(`{"digits": %d, "pi": "%s"}`, digits, result)
+		return 200, fmt.Sprintf(`{"digits": %d, "pi": "%s"}`, digits, result)
 
 	case "/mandelbrot":
 		width := parseIntParam(params, "width", 100)
@@ -205,10 +205,10 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 	
 		result, err := tasks.Mandelbrot(width, height, maxIter)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 	
-		return fmt.Sprintf(`{"width": %d, "height": %d, "max_iter": %d, "result": %v}`,
+		return 200, fmt.Sprintf(`{"width": %d, "height": %d, "max_iter": %d, "result": %v}`,
 			width, height, maxIter, result)
 	
 	case "/matrixmul":
@@ -217,10 +217,10 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 	
 		hash, err := tasks.MatrixMul(size, int64(seed))
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 	
-		return fmt.Sprintf(`{"size": %d, "seed": %d, "hash": "%s"}`, size, seed, hash)	
+		return 200, fmt.Sprintf(`{"size": %d, "seed": %d, "hash": "%s"}`, size, seed, hash)	
 		
 
 	// --------------------------
@@ -232,45 +232,45 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		algo := parseStringParam(params, "algo", "merge")
 
 		if name == "" {
-			return `{"error": "Falta parámetro name"}`
+			return 400, `{"error": "Falta parámetro name"}`
 		}
 
 		sortedFile, elapsedMs, err := tasks.SortFile(name, algo)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"file": "%s", "algorithm": "%s", "output": "%s", "duration_ms": %d}`,
+		return 200, fmt.Sprintf(`{"file": "%s", "algorithm": "%s", "output": "%s", "duration_ms": %d}`,
 			name, algo, sortedFile, elapsedMs)
 
 
 	case "/wordcount":
 		name := parseStringParam(params, "name", "")
 		if name == "" {
-			return `{"error": "Falta parámetro name"}`
+			return 400, `{"error": "Falta parámetro name"}`
 		}
 
 		lines, words, bytes, err := tasks.WordCount(name)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"file": "%s", "lines": %d, "words": %d, "bytes": %d}`,
+		return 200, fmt.Sprintf(`{"file": "%s", "lines": %d, "words": %d, "bytes": %d}`,
 			name, lines, words, bytes)
 
 	case "/grep":
 		name := parseStringParam(params, "name", "")
 		pattern := parseStringParam(params, "pattern", "")
 		if name == "" || pattern == "" {
-			return `{"error": "Faltan parámetros name o pattern"}`
+			return 400, `{"error": "Faltan parámetros name o pattern"}`
 		}
 
 		count, lines, err := tasks.Grep(name, pattern)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"file": "%s", "pattern": "%s", "matches": %d, "lines": %v}`,
+		return 200, fmt.Sprintf(`{"file": "%s", "pattern": "%s", "matches": %d, "lines": %v}`,
 			name, pattern, count, lines)
 
 	case "/compress":
@@ -278,15 +278,15 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		codec := parseStringParam(params, "codec", "gzip")
 
 		if name == "" {
-			return `{"error": "Falta parámetro name"}`
+			return 400, `{"error": "Falta parámetro name"}`
 		}
 
 		output, size, err := tasks.Compress(name, codec)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"input": "%s", "output": "%s", "size_bytes": %d}`,
+		return 200, fmt.Sprintf(`{"input": "%s", "output": "%s", "size_bytes": %d}`,
 			name, output, size)
 
 	case "/hashfile":
@@ -294,15 +294,15 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		
 
 		if name == "" {
-			return `{"error": "Falta parámetro name"}`
+			return 400, `{"error": "Falta parámetro name"}`
 		}
 
 		hash, err := tasks.HashFile(name)
 		if err != nil {
-			return fmt.Sprintf(`{"error": "%v"}`, err)
+			return 500, fmt.Sprintf(`{"error": "%v"}`, err)
 		}
 
-		return fmt.Sprintf(`{"file": "%s" "hash": "%s"}`,
+		return 200, fmt.Sprintf(`{"file": "%s" "hash": "%s"}`,
 			name, hash)
 
 	// --------------------------
@@ -311,7 +311,7 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 	case "/jobs/submit":
 		task := params.Get("task")
 		if task == "" {
-			return buildResponse(400, `{"error": "falta parámetro 'task'"}`)
+			return 400, `{"error": "falta parámetro 'task'"}`
 		}
 
 		// Prioridad (default = normal)
@@ -329,54 +329,54 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 		jobID, status, err := manager.Submit(task, params, prio)
 		if err != nil {
 			body := fmt.Sprintf(`{"error": "%v"}`, err)
-			return buildResponse(400, body)
+			return 400, body
 		}
 
 		body := fmt.Sprintf(`{"job_id": "%s", "status": "%s"}`, jobID, status)
-		return buildResponse(200, body)
+		return 200, body
 
 	case "/jobs/status":
 		id := parseStringParam(params, "id", "")
 		if id == "" {
-			return buildResponse(400, `{"error": "falta parámetro 'id'"}`)
+			return 400, `{"error": "falta parámetro 'id'"}`
 		}
 
 		job, err := manager.GetStatus(id)
 		if err != nil {
-			return buildResponse(404, `{"error": "Job no encontrado"}`)
+			return 404, `{"error": "Job no encontrado"}`
 		}
 
 		body, _ := json.Marshal(job)
-		return buildResponse(200, string(body))
+		return 200, string(body)
 
 	case "/jobs/result":
 		id := parseStringParam(params, "id", "")
 		if id == "" {
-			return buildResponse(400, `{"error": "falta parámetro 'id'"}`)
+			return 400, `{"error": "falta parámetro 'id'"}`
 		}
 
 		job, err := manager.GetResult(id)
 		if err != nil {
-			return buildResponse(404, `{"error": "Job no encontrado"}`)
+			return 404, `{"error": "Job no encontrado"}`
 		}
 
 		body, _ := json.Marshal(job)
-		return buildResponse(200, string(body))
+		return 200, string(body)
 
 	case "/jobs/cancel":
 		id := parseStringParam(params, "id", "")
 		if id == "" {
-			return buildResponse(400, `{"error": "falta parámetro 'id'"}`)
+			return 400, `{"error": "falta parámetro 'id'"}`
 		}
 
 		status, err := manager.Cancel(id)
 		if err != nil {
 			body := fmt.Sprintf(`{"error": "%v"}`, err)
-			return buildResponse(404, body)
+			return 404, body
 		}
 
 		body := fmt.Sprintf(`{"id": "%s", "status": "%s"}`, id, status)
-		return buildResponse(200, body)
+		return 200, body
 
 	// --------------------------
 	// METRICS 
@@ -390,16 +390,16 @@ func HandleRequest(method, path string, manager *jobs.Manager) string {
 			"queues":  queues,
 			"total_jobs": len(manager.JobsSnapshot()),
 		})
-		return buildResponse(200, string(body))
+		return 200, string(body)
 	// --------------------------
 	// JOB CLEANUP
 	// --------------------------
 	case "/jobs/cleanup":
 		manager.CleanupOnce()
-		return buildResponse(200, `{"status":"ok"}`)
+		return 200, `{"status":"ok"}`
 	
 	default:
-		return buildResponse(404, `{"error": "Ruta no encontrada"}`)
+		return 404, `{"error": "Ruta no encontrada"}`
 	}
 }
 

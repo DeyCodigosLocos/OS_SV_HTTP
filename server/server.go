@@ -64,10 +64,11 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 	fmt.Printf("[%s] %s %s\n", version, method, path)
 
-	body := HandleRequest(method, path, s.Manager)
+
+	statusCode, body := HandleRequest(method, path, s.Manager)
 
 	// Construir y enviar respuesta HTTP/1.0 correcta
-	response := buildResponse(200, body)
+	response := buildResponse(statusCode, body)
 	conn.Write([]byte(response))
 }
 
@@ -78,8 +79,3 @@ func parseRequestLine(line string) (method, path, version string) {
 	}
 	return "", "", ""
 }
-
-
-
-
-

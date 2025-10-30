@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -8,6 +7,7 @@ import (
 	"P1/tasks"
 	"P1/jobs"
 	"time"
+	"flag"
 )
 
 // Instancia global del Job Manager
@@ -88,15 +88,20 @@ func main() {
 
 	jobManager.Register("matrixmul",
 		func(params map[string]string, job *jobs.Job) (any, error) {
-			sizeStr := params["n"]
+			sizeStr := params["size"] // <-- CORREGIDO: "size"
 			seedStr := params["seed"]
-			size, _ := strconv.Atoi(sizeStr)
-			seed, _ := strconv.ParseInt(seedStr, 10, 64)
+
+			size, errSize := strconv.Atoi(sizeStr)
+			seed, errSeed := strconv.ParseInt(seedStr, 10, 64)
+
+			if errSize != nil || errSeed != nil {
+				return nil, fmt.Errorf("parámetros 'size' o 'seed' inválidos")
+			}
 
 			hash, err := tasks.MatrixMul(size, seed)
 			job.Progress = 100
 			if err != nil {
-				return map[string]any{"size": size, "error": err.Error()}, nil
+				return nil, err 
 			}
 			return map[string]any{"size": size, "hash": hash}, nil
 		},
@@ -171,8 +176,9 @@ func main() {
 		},
 		2, 4, 60*time.Second)
 
-	
-	port := 8080
+	portPtr := flag.Int("port", 8080, "Puerto TCP para escuchar")
+	flag.Parse()
+	port := *portPtr
 	fmt.Printf("Iniciando servidor en puerto %d...\n", port)
 
 	srv := server.NewServer(port, jobManager)
