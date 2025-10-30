@@ -24,7 +24,7 @@ def parse_json_from_http_response(resp_text):
         body = resp_text.split("\r\n\r\n", 1)[1]
         return json.loads(body)
     except Exception as e:
-        print("⚠️  Error parseando JSON:", e)
+        print("  Error parseando JSON:", e)
         return None
 
 
@@ -38,11 +38,11 @@ for job in jobs_to_submit:
         if data and "job_id" in data:
             job_id = data["job_id"]
             submitted_jobs[job_id] = job
-            print(f"✅ Submitted '{job['task']}' -> job_id={job_id}, status={data.get('status')}")
+            print(f" Submitted '{job['task']}' -> job_id={job_id}, status={data.get('status')}")
         else:
-            print(f"❌ Error al enviar job {job['task']}: respuesta inválida → {r.text[:80]}")
+            print(f" Error al enviar job {job['task']}: respuesta inválida → {r.text[:80]}")
     except Exception as e:
-        print(f"💥 Error al enviar job {job['task']}: {e}")
+        print(f" Error al enviar job {job['task']}: {e}")
 
 
 # ------------------------------------------------------------
@@ -54,7 +54,7 @@ for job_id in submitted_jobs:
             r = requests.get(f"{BASE_URL}/jobs/status", params={"id": job_id}, timeout=10)
             data = parse_json_from_http_response(r.text)
             if not data:
-                print(f"⚠️  No se pudo obtener estado de {job_id}")
+                print(f"  No se pudo obtener estado de {job_id}")
                 break
             status = data.get("status")
             progress = data.get("progress", 0)
@@ -64,7 +64,7 @@ for job_id in submitted_jobs:
                 break
             time.sleep(1)
     except Exception as e:
-        print(f"💥 Error al consultar status para job {job_id}: {e}")
+        print(f" Error al consultar status para job {job_id}: {e}")
 
 
 # ------------------------------------------------------------
@@ -74,13 +74,13 @@ for job_id in submitted_jobs:
     try:
         r = requests.get(f"{BASE_URL}/jobs/result", params={"id": job_id}, timeout=10)
         data = parse_json_from_http_response(r.text)
-        print(f"📦 Resultado {job_id} ({submitted_jobs[job_id]['task']}): {json.dumps(data, indent=2)}")
+        print(f" Resultado {job_id} ({submitted_jobs[job_id]['task']}): {json.dumps(data, indent=2)}")
     except Exception as e:
-        print(f"💥 Error al obtener resultado para job {job_id}: {e}")
+        print(f" Error al obtener resultado para job {job_id}: {e}")
 
 
 # ------------------------------------------------------------
-print("\n--- 📊 MÉTRICAS DEL SERVIDOR ---")
+print("\n---  MÉTRICAS DEL SERVIDOR ---")
 # ------------------------------------------------------------
 try:
     r = requests.get(f"{BASE_URL}/metrics", timeout=10)
@@ -88,9 +88,9 @@ try:
     if metrics:
         print(json.dumps(metrics, indent=2))
     else:
-        print("⚠️ No se pudieron obtener métricas del servidor.")
+        print(" No se pudieron obtener métricas del servidor.")
 except Exception as e:
-    print(f"💥 Error al obtener métricas: {e}")
+    print(f" Error al obtener métricas: {e}")
 
 
-print("\n--- 🧠 TEST COMPLETO ---")
+print("\n---  TEST COMPLETO ---")

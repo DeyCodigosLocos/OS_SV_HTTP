@@ -3,6 +3,8 @@ package server
 import (
 	"P1/jobs"
 	"bufio"
+	"crypto/rand" // NUEVA IMPORTACIÓN
+	"encoding/hex" // NUEVA IMPORTACIÓN
 	"fmt"
 	"net"
 	"strings"
@@ -33,23 +35,29 @@ func (s *Server) Start() {
 			fmt.Println("Error al aceptar conexión:", err)
 			continue
 		}
-		fmt.Printf("Nueva conexión desde %s\n", conn.RemoteAddr())
+		
+		// Generar Request ID único para esta conexión
+		b := make([]byte, 8)
+		rand.Read(b)
+		reqID := hex.EncodeToString(b)
+		
+		fmt.Printf("[%s] Nueva conexión desde %s\n", reqID, conn.RemoteAddr())
 
 		// cada conexión se maneja en una goroutine
-		go s.handleConnection(conn)
+		go s.handleConnection(conn, reqID) // <-- CAMBIO: Pasar reqID
 	}
 }
 
 // Maneja una conexión individual.
 // Lee la solicitud, procesa y envía la respuesta.
 // cuando termina, cierra la conexión.
-func (s *Server) handleConnection(conn net.Conn) {
+func (s *Server) handleConnection(conn net.Conn, reqID string) { // <-- CAMBIO: Aceptar reqID
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
 	requestLine, err := reader.ReadString('\n')
 	if err != nil {
-		fmt.Println("Error al leer solicitud:", err)
+		fmt.Printf("[%s] Error al leer solicitud: %v\n", reqID, err)
 		return
 	}
 	method, path, version := parseRequestLine(requestLine)
@@ -62,13 +70,12 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 	}
 
-	fmt.Printf("[%s] %s %s\n", version, method, path)
-
+	fmt.Printf("[%s] %s %s %s\n", reqID, version, method, path)
 
 	statusCode, body := HandleRequest(method, path, s.Manager)
 
 	// Construir y enviar respuesta HTTP/1.0 correcta
-	response := buildResponse(statusCode, body)
+	response := buildResponse(statusCode, body, reqID)
 	conn.Write([]byte(response))
 }
 
