@@ -27,6 +27,20 @@ type taskConf struct {
 	pool       *WorkerPool
 }
 
+
+
+type ManagerInterface interface {
+	Submit(task string, params url.Values, prio JobPriority) (string, JobStatus, error)
+	GetStatus(jobID string) (*Job, error)
+	GetResult(jobID string) (*Job, error)
+	Cancel(jobID string) (JobStatus, error)
+	Register(name string, task TaskFunc, workers int, queueDepth int, timeout time.Duration)
+	Close()
+	WorkerStats() map[string]any
+	QueueSizes() map[string]int
+	JobsSnapshot() map[string]*Job
+	CleanupOnce()
+}
 // -----------------------------------------------------------------------------
 // Manager: maneja jobs, pools, persistencia y limpieza
 // -----------------------------------------------------------------------------

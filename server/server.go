@@ -3,20 +3,21 @@ package server
 import (
 	"P1/jobs"
 	"bufio"
-	"crypto/rand" // NUEVA IMPORTACIÓN
-	"encoding/hex" // NUEVA IMPORTACIÓN
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
 )
 
 type Server struct {
-	port int
-	Manager *jobs.Manager
+	port    int
+	Manager jobs.ManagerInterface 
 }
 
-func NewServer(port int, manager *jobs.Manager) *Server {
-	return &Server{port: port, Manager: manager}
+func NewServer(port int, manager jobs.ManagerInterface) *Server { 
+
+	return &Server{port: port, Manager: manager} 
 }
 
 func (s *Server) Start() {
@@ -35,23 +36,17 @@ func (s *Server) Start() {
 			fmt.Println("Error al aceptar conexión:", err)
 			continue
 		}
-		
-		// Generar Request ID único para esta conexión
+
 		b := make([]byte, 8)
 		rand.Read(b)
 		reqID := hex.EncodeToString(b)
-		
-		fmt.Printf("[%s] Nueva conexión desde %s\n", reqID, conn.RemoteAddr())
 
-		// cada conexión se maneja en una goroutine
-		go s.handleConnection(conn, reqID) // <-- CAMBIO: Pasar reqID
+		fmt.Printf("[%s] Nueva conexión desde %s\n", reqID, conn.RemoteAddr())
+		go s.handleConnection(conn, reqID)
 	}
 }
 
-// Maneja una conexión individual.
-// Lee la solicitud, procesa y envía la respuesta.
-// cuando termina, cierra la conexión.
-func (s *Server) handleConnection(conn net.Conn, reqID string) { // <-- CAMBIO: Aceptar reqID
+func (s *Server) handleConnection(conn net.Conn, reqID string) {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
 
@@ -62,7 +57,6 @@ func (s *Server) handleConnection(conn net.Conn, reqID string) { // <-- CAMBIO: 
 	}
 	method, path, version := parseRequestLine(requestLine)
 
-	// Ignorar headers
 	for {
 		line, _ := reader.ReadString('\n')
 		if line == "\r\n" || line == "\n" {
@@ -71,10 +65,7 @@ func (s *Server) handleConnection(conn net.Conn, reqID string) { // <-- CAMBIO: 
 	}
 
 	fmt.Printf("[%s] %s %s %s\n", reqID, version, method, path)
-
 	statusCode, body := HandleRequest(method, path, s.Manager)
-
-	// Construir y enviar respuesta HTTP/1.0 correcta
 	response := buildResponse(statusCode, body, reqID)
 	conn.Write([]byte(response))
 }

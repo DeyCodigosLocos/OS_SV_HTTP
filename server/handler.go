@@ -18,7 +18,7 @@ type HTTPResponse struct {
 	Body       string
 	ContentType string
 }
-func HandleRequest(method, path string, manager *jobs.Manager) (int, string) {
+func HandleRequest(method, path string, manager jobs.ManagerInterface) (int, string) { 
 	if method != "GET" {
 		return 400, `{"error": "Método no soportado, use GET"}`
 	}
